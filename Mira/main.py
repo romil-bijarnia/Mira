@@ -1,5 +1,5 @@
 from __future__ import annotations
-import argparse, pathlib, random, time
+import argparse, pathlib, random, time, copy
 from dataclasses import dataclass
 from typing import List, Tuple
 
@@ -142,6 +142,7 @@ def train_epoch(epoch: int, model, loader, criterion,
 def build_loaders(args, ds_train: HAM10000Dataset,
                   ds_eval: HAM10000Dataset, fold: int = 0):
     sgkf = StratifiedGroupKFold(n_splits=5, shuffle=True, random_state=42)
+
     y = ds_train.df["dx"]
     groups = ds_train.df["lesion_id"].fillna(ds_train.df["image_id"])
     train_idx, test_idx = list(
@@ -149,13 +150,36 @@ def build_loaders(args, ds_train: HAM10000Dataset,
     train_df = ds_train.df.iloc[train_idx].reset_index(drop=True)
     test_df = ds_train.df.iloc[test_idx].reset_index(drop=True)
 
+
+    y = ds.df["dx"]
+    groups = ds.df["lesion_id"].fillna(ds.df["image_id"])
+    train_idx, test_idx = list(sgkf.split(np.zeros(len(ds)), y, groups))[fold]
+    # Keep original indices so Subset points to the correct rows in ds.df
+    train_df = ds.df.iloc[train_idx]
+    test_df = ds.df.iloc[test_idx]
+
+
+
     val_mask = train_df.groupby("dx").sample(frac=0.2, random_state=42).index
-    val_df = train_df.loc[val_mask].reset_index(drop=True)
-    train_df = train_df.drop(val_mask).reset_index(drop=True)
+    val_df = train_df.loc[val_mask]
+    train_df = train_df.drop(val_mask)
+
 
     train_ds = Subset(ds_train, train_df.index.to_numpy())
     val_ds = Subset(ds_eval, val_df.index.to_numpy())
     test_ds = Subset(ds_eval, test_df.index.to_numpy())
+
+
+
+    train_ds = Subset(ds_train, train_df.index.to_numpy())
+    val_ds = Subset(ds_eval, val_df.index.to_numpy())
+    test_ds = Subset(ds_eval, test_df.index.to_numpy())
+
+    def subset(df_slice: pd.DataFrame) -> Subset:
+        """Return a view of ``ds`` for the rows in ``df_slice``."""
+        return Subset(ds, df_slice.index.to_numpy())
+
+
 
     class_counts = train_df["dx"].value_counts().reindex(ds_train.classes,
                                                           fill_value=0).to_numpy()
@@ -265,16 +289,27 @@ def main(argv: List[str] | None = None) -> None:
     optimizer = optim.Adam(model.parameters(), lr=args.lr)
     scaler = torch.cuda.amp.GradScaler() if device.type == "cuda" else None
 
+    best_state = None
+    best_acc = 0.0
     for epoch in range(args.epochs):
         train_metrics = train_epoch(epoch, model, train_loader,
                                     criterion, optimizer, scaler,
                                     device, args.accum)
         val_metrics, _, _ = evaluate(model, val_loader, criterion, device)
+        if val_metrics.acc > best_acc:
+            best_acc = val_metrics.acc
+            best_state = copy.deepcopy(model.state_dict())
         print(f"Epoch {epoch:02d}  "
               f"train_loss={train_metrics.loss:.4f}  train_acc={train_metrics.acc:.4f}  "
               f"val_loss={val_metrics.loss:.4f}    val_acc={val_metrics.acc:.4f}")
 
-    # ... rest of main (saving, test eval, etc.) ...
+    if best_state is not None:
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        torch.save(best_state, args.output)
+        model.load_state_dict(best_state)
+
+    test_metrics, _, _ = evaluate(model, test_loader, criterion, device)
+    print(f"Test loss={test_metrics.loss:.4f}  test_acc={test_metrics.acc:.4f}")
 
 if __name__ == "__main__":
     main()
