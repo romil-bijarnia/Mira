@@ -1,5 +1,5 @@
 from __future__ import annotations
-import argparse, pathlib, random, time
+import argparse, pathlib, random, time, copy
 from dataclasses import dataclass
 from typing import List, Tuple
 
@@ -280,16 +280,27 @@ def main(argv: List[str] | None = None) -> None:
     optimizer = optim.Adam(model.parameters(), lr=args.lr)
     scaler = torch.cuda.amp.GradScaler() if device.type == "cuda" else None
 
+    best_state = None
+    best_acc = 0.0
     for epoch in range(args.epochs):
         train_metrics = train_epoch(epoch, model, train_loader,
                                     criterion, optimizer, scaler,
                                     device, args.accum)
         val_metrics, _, _ = evaluate(model, val_loader, criterion, device)
+        if val_metrics.acc > best_acc:
+            best_acc = val_metrics.acc
+            best_state = copy.deepcopy(model.state_dict())
         print(f"Epoch {epoch:02d}  "
               f"train_loss={train_metrics.loss:.4f}  train_acc={train_metrics.acc:.4f}  "
               f"val_loss={val_metrics.loss:.4f}    val_acc={val_metrics.acc:.4f}")
 
-    # ... rest of main (saving, test eval, etc.) ...
+    if best_state is not None:
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        torch.save(best_state, args.output)
+        model.load_state_dict(best_state)
+
+    test_metrics, _, _ = evaluate(model, test_loader, criterion, device)
+    print(f"Test loss={test_metrics.loss:.4f}  test_acc={test_metrics.acc:.4f}")
 
 if __name__ == "__main__":
     main()
