@@ -147,35 +147,53 @@ def build_loaders(args, ds_train: HAM10000Dataset,
     groups = ds_train.df["lesion_id"].fillna(ds_train.df["image_id"])
     train_idx, test_idx = list(
         sgkf.split(np.zeros(len(ds_train)), y, groups))[fold]
+
     # Keep original indices so Subset points to the correct rows in ds_train.df
     train_df = ds_train.df.iloc[train_idx]
     test_df = ds_train.df.iloc[test_idx]
 
 
+    train_df = ds_train.df.iloc[train_idx].reset_index(drop=True)
+    test_df = ds_train.df.iloc[test_idx].reset_index(drop=True)
+
+    # carve out a validation set from the training slice
+
     val_mask = train_df.groupby("dx").sample(frac=0.2, random_state=42).index
     val_df = train_df.loc[val_mask]
     train_df = train_df.drop(val_mask)
-
 
     train_ds = Subset(ds_train, train_df.index.to_numpy())
     val_ds = Subset(ds_eval, val_df.index.to_numpy())
     test_ds = Subset(ds_eval, test_df.index.to_numpy())
 
+
     class_counts = train_df["dx"].value_counts().reindex(ds_train.classes,
                                                           fill_value=0).to_numpy()
+
+    class_counts = train_df["dx"].value_counts().reindex(
+        ds_train.classes, fill_value=0
+    ).to_numpy()
+
     weights = 1.0 / class_counts
-    sample_weights = [weights[ds_train.class_to_idx[lbl]]
-                      for lbl in train_df["dx"]]
-    sampler = WeightedRandomSampler(sample_weights, len(sample_weights),
-                                    replacement=True)
+    sample_weights = [weights[ds_train.class_to_idx[lbl]] for lbl in train_df["dx"]]
+    sampler = WeightedRandomSampler(
+        sample_weights, len(sample_weights), replacement=True
+    )
 
     mk_loader = lambda d, shuffle=False, sampler=None: DataLoader(
-        d, batch_size=args.batch_size, num_workers=args.workers,
-        shuffle=shuffle, sampler=sampler, pin_memory=False)
+        d,
+        batch_size=args.batch_size,
+        num_workers=args.workers,
+        shuffle=shuffle,
+        sampler=sampler,
+        pin_memory=False,
+    )
 
-    return (mk_loader(train_ds, sampler=sampler),
-            mk_loader(val_ds),
-            mk_loader(test_ds))
+    return (
+        mk_loader(train_ds, sampler=sampler),
+        mk_loader(val_ds),
+        mk_loader(test_ds),
+    )
 
 # ────────────────────────────────────────────────────────────────────────
 # 5.  Main
@@ -284,10 +302,14 @@ def main(argv: List[str] | None = None) -> None:
               f"val_loss={val_metrics.loss:.4f}    val_acc={val_metrics.acc:.4f}")
 
     if best_state is not None:
+        # persist the weights of the model that achieved the highest
+        # validation accuracy and reload them for final evaluation
         args.output.parent.mkdir(parents=True, exist_ok=True)
         torch.save(best_state, args.output)
+        print(f"Saved best model to {args.output}")
         model.load_state_dict(best_state)
 
+    # report performance on the held out test set so users can gauge quality
     test_metrics, _, _ = evaluate(model, test_loader, criterion, device)
     print(f"Test loss={test_metrics.loss:.4f}  test_acc={test_metrics.acc:.4f}")
 
