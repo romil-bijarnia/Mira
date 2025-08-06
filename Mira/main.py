@@ -150,12 +150,14 @@ def build_loaders(args, ds_train: HAM10000Dataset,
     train_df = ds_train.df.iloc[train_idx].reset_index(drop=True)
     test_df = ds_train.df.iloc[test_idx].reset_index(drop=True)
 
+
     y = ds.df["dx"]
     groups = ds.df["lesion_id"].fillna(ds.df["image_id"])
     train_idx, test_idx = list(sgkf.split(np.zeros(len(ds)), y, groups))[fold]
     # Keep original indices so Subset points to the correct rows in ds.df
     train_df = ds.df.iloc[train_idx]
     test_df = ds.df.iloc[test_idx]
+
 
 
     val_mask = train_df.groupby("dx").sample(frac=0.2, random_state=42).index
@@ -167,9 +169,16 @@ def build_loaders(args, ds_train: HAM10000Dataset,
     val_ds = Subset(ds_eval, val_df.index.to_numpy())
     test_ds = Subset(ds_eval, test_df.index.to_numpy())
 
+
+
+    train_ds = Subset(ds_train, train_df.index.to_numpy())
+    val_ds = Subset(ds_eval, val_df.index.to_numpy())
+    test_ds = Subset(ds_eval, test_df.index.to_numpy())
+
     def subset(df_slice: pd.DataFrame) -> Subset:
         """Return a view of ``ds`` for the rows in ``df_slice``."""
         return Subset(ds, df_slice.index.to_numpy())
+
 
 
     class_counts = train_df["dx"].value_counts().reindex(ds_train.classes,
