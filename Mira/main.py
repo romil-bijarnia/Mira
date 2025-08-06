@@ -176,7 +176,7 @@ def build_loaders(args, ds_train: HAM10000Dataset,
     sampler = WeightedRandomSampler(sample_weights, len(sample_weights),
                                     replacement=True)
 
-    class_counts = train_df["dx"].value_counts().reindex(ds_train.classes,
+    class_counts = train_df["dx"].value_counts().reindex(ds_train.classes)
 
 
     class_counts = train_df["dx"].value_counts().reindex(
