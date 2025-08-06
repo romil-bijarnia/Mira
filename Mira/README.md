@@ -12,22 +12,13 @@ offers command-line options for training, evaluation and saving model weights.
 > used for clinical decisions.  It is intended for research and educational
 > purposes only.
 
-## Quick start with synthetic data
-
-For a quick check that the environment works you can train on randomly
-generated images:
-
-```bash
-python cancer_detector.py --fake-data --epochs 1
-```
-
 ## Training on the HAM10000 dataset
 
 1. Download and extract the dataset (images and `HAM10000_metadata.csv`).
 2. Run the training script:
 
    ```bash
-   python cancer_detector.py \
+   python main.py \
        --metadata /path/to/HAM10000_metadata.csv \
        --images-dir /path/to/all_images/ \
        --epochs 10 --batch-size 32
@@ -38,7 +29,7 @@ python cancer_detector.py --fake-data --epochs 1
 
 ## File overview
 
-* **`cancer_detector.py`** – PyTorch training script with dataset loader and
+* **`main.py`** – PyTorch training script with dataset loader and
   transfer-learning model.
 * **`README.md`** – you are here.
 
