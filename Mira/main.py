@@ -152,10 +152,6 @@ def build_loaders(args, ds_train: HAM10000Dataset,
     train_df = ds_train.df.iloc[train_idx]
     test_df = ds_train.df.iloc[test_idx]
 
-
-    train_df = ds_train.df.iloc[train_idx].reset_index(drop=True)
-    test_df = ds_train.df.iloc[test_idx].reset_index(drop=True)
-
     # carve out a validation set from the training slice
 
     val_mask = train_df.groupby("dx").sample(frac=0.2, random_state=42).index
