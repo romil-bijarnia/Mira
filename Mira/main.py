@@ -142,6 +142,7 @@ def train_epoch(epoch: int, model, loader, criterion,
 def build_loaders(args, ds_train: HAM10000Dataset,
                   ds_eval: HAM10000Dataset, fold: int = 0):
     sgkf = StratifiedGroupKFold(n_splits=5, shuffle=True, random_state=42)
+
     y = ds_train.df["dx"]
     groups = ds_train.df["lesion_id"].fillna(ds_train.df["image_id"])
     train_idx, test_idx = list(
@@ -149,13 +150,27 @@ def build_loaders(args, ds_train: HAM10000Dataset,
     train_df = ds_train.df.iloc[train_idx].reset_index(drop=True)
     test_df = ds_train.df.iloc[test_idx].reset_index(drop=True)
 
+    y = ds.df["dx"]
+    groups = ds.df["lesion_id"].fillna(ds.df["image_id"])
+    train_idx, test_idx = list(sgkf.split(np.zeros(len(ds)), y, groups))[fold]
+    # Keep original indices so Subset points to the correct rows in ds.df
+    train_df = ds.df.iloc[train_idx]
+    test_df = ds.df.iloc[test_idx]
+
+
     val_mask = train_df.groupby("dx").sample(frac=0.2, random_state=42).index
-    val_df = train_df.loc[val_mask].reset_index(drop=True)
-    train_df = train_df.drop(val_mask).reset_index(drop=True)
+    val_df = train_df.loc[val_mask]
+    train_df = train_df.drop(val_mask)
+
 
     train_ds = Subset(ds_train, train_df.index.to_numpy())
     val_ds = Subset(ds_eval, val_df.index.to_numpy())
     test_ds = Subset(ds_eval, test_df.index.to_numpy())
+
+    def subset(df_slice: pd.DataFrame) -> Subset:
+        """Return a view of ``ds`` for the rows in ``df_slice``."""
+        return Subset(ds, df_slice.index.to_numpy())
+
 
     class_counts = train_df["dx"].value_counts().reindex(ds_train.classes,
                                                           fill_value=0).to_numpy()
