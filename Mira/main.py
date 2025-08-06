@@ -148,11 +148,16 @@ def build_loaders(args, ds_train: HAM10000Dataset,
     train_idx, test_idx = list(
         sgkf.split(np.zeros(len(ds_train)), y, groups))[fold]
 
+    train_df = ds_train.df.iloc[train_idx].reset_index(drop=True)
+    test_df = ds_train.df.iloc[test_idx].reset_index(drop=True)
+
+
     # Keep original indices so Subset points to the correct rows in ds_train.df
     train_df = ds_train.df.iloc[train_idx]
     test_df = ds_train.df.iloc[test_idx]
 
     # carve out a validation set from the training slice
+
 
     val_mask = train_df.groupby("dx").sample(frac=0.2, random_state=42).index
     val_df = train_df.loc[val_mask]
@@ -165,6 +170,14 @@ def build_loaders(args, ds_train: HAM10000Dataset,
 
     class_counts = train_df["dx"].value_counts().reindex(ds_train.classes,
                                                           fill_value=0).to_numpy()
+    weights = 1.0 / class_counts
+    sample_weights = [weights[ds_train.class_to_idx[lbl]]
+                      for lbl in train_df["dx"]]
+    sampler = WeightedRandomSampler(sample_weights, len(sample_weights),
+                                    replacement=True)
+
+    class_counts = train_df["dx"].value_counts().reindex(ds_train.classes,
+
 
     class_counts = train_df["dx"].value_counts().reindex(
         ds_train.classes, fill_value=0
