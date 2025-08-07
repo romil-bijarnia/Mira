@@ -1,0 +1,8 @@
+torch
+torchvision
+pandas
+scikit-learn
+tqdm
+colorama
+torchinfo
+timm
